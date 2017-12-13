@@ -1,8 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using UnitTestBoilerplate.Model;
 
 namespace UnitTestBoilerplate
@@ -19,107 +16,88 @@ namespace UnitTestBoilerplate
 
 			this.template = new StringBuilder();
 
-			// Using statements
-			this.AppendLineIndented("$UsingStatements$");
+			AddUsingStatements();
+			AddNamespace();
+
+
+			AddTestClassAttribute(testFramework);
+			CreateTestClass(testFramework, mockFramework);
+
+			AddTestClassStartCode(mockFramework);
+			AddTestClassMockFields(mockFramework);
+			AddTestInitialize(testFramework, mockFramework);
+
+			AddTestCleanup(testFramework, mockFramework);
+
+			AddTestMethod(testFramework, mockFramework);
+
+			AddCreationHelperMethod(mockFramework);
+
+			AddEndOfClassAndNamespace();
+
+			return this.template.ToString();
+		}
+
+		private void AddTestInitialize(TestFramework testFramework, MockFramework mockFramework)
+		{
+			// Test initialize
+			switch (testFramework.TestInitializeStyle)
+			{
+				case TestInitializeStyle.Constructor:
+					this.AppendLineIndented("public $ClassName$Tests()");
+
+					break;
+				case TestInitializeStyle.AttributedMethod:
+					this.AppendLineIndented($"[{testFramework.TestInitializeAttribute}]");
+					this.AppendLineIndented($"public void {testFramework.TestInitializeAttribute}()");
+
+					break;
+				default:
+					throw new ArgumentOutOfRangeException(nameof(testFramework));
+			}
+
+			this.AppendLineIndented("{");
+			this.indentLevel++;
+
+			this.AppendLineIndented("$MockFieldInitializations$");
+
+			AddInitializeStartCode(mockFramework);
+
+			this.indentLevel--;
+			this.AppendLineIndented("}");
 			this.AppendLineIndented();
+		}
 
-			// Namespace
-			this.AppendLineIndented("namespace $Namespace$");
+		private void AddInitializeStartCode(MockFramework mockFramework)
+		{
+			if (string.IsNullOrEmpty(mockFramework.InitializeStartCode))
+			{
+				return;
+			}
+
+			this.AppendLineIndented();
+			this.AppendLineIndented(mockFramework.InitializeStartCode);
+
+		}
+
+		private void AddCreationHelperMethod(MockFramework mockFramework)
+		{
+			if (mockFramework.TestedObjectCreationStyle != TestedObjectCreationStyle.HelperMethod)
+			{
+				return;
+			}
+
+			this.AppendLineIndented();
+			this.AppendLineIndented("private $ClassName$ Create$ClassNameShort$()");
 			this.AppendLineIndented("{");
 			this.indentLevel++;
+			this.AppendLineIndented("return $ExplicitConstructor$;");
+			this.indentLevel--;
+			this.AppendLineIndented("}");
+		}
 
-			// Test class attribute
-			if (!string.IsNullOrEmpty(testFramework.TestClassAttribute))
-			{
-				this.AppendLineIndented($"[{testFramework.TestClassAttribute}]");
-			}
-
-			// Test class declaration
-			this.AppendIndent();
-			this.template.Append("public class $ClassName$Tests");
-			if (mockFramework.HasTestCleanup && testFramework.TestCleanupStyle == TestCleanupStyle.Disposable)
-			{
-				this.template.Append(" : IDisposable");
-			}
-
-			this.template.AppendLine();
-			this.AppendLineIndented("{");
-			this.indentLevel++;
-
-			// Test class start code
-			if (!string.IsNullOrEmpty(mockFramework.ClassStartCode))
-			{
-				this.AppendLineIndented(mockFramework.ClassStartCode);
-				this.AppendLineIndented();
-			}
-
-			if (mockFramework.HasMockFields)
-			{
-				// Mock field declaration
-				this.AppendLineIndented("$MockFieldDeclarations$");
-				this.AppendLineIndented();
-
-				// Test initialize
-				switch (testFramework.TestInitializeStyle)
-				{
-					case TestInitializeStyle.Constructor:
-						this.AppendLineIndented("public $ClassName$Tests()");
-
-						break;
-					case TestInitializeStyle.AttributedMethod:
-						this.AppendLineIndented($"[{testFramework.TestInitializeAttribute}]");
-						this.AppendLineIndented($"public void {testFramework.TestInitializeAttribute}()");
-
-						break;
-					default:
-						throw new ArgumentOutOfRangeException(nameof(testFramework));
-				}
-
-				this.AppendLineIndented("{");
-				this.indentLevel++;
-
-				if (!string.IsNullOrEmpty(mockFramework.InitializeStartCode))
-				{
-					this.AppendLineIndented(mockFramework.InitializeStartCode);
-					this.AppendLineIndented();
-				}
-
-				this.AppendLineIndented("$MockFieldInitializations$");
-
-				this.indentLevel--;
-				this.AppendLineIndented("}");
-				this.AppendLineIndented();
-			}
-
-			// Test cleanup
-			if (mockFramework.HasTestCleanup)
-			{
-				switch (testFramework.TestCleanupStyle)
-				{
-					case TestCleanupStyle.Disposable:
-						this.AppendLineIndented("public void Dispose()");
-
-						break;
-					case TestCleanupStyle.AttributedMethod:
-						this.AppendLineIndented($"[{testFramework.TestCleanupAttribute}]");
-						this.AppendLineIndented($"public void {testFramework.TestCleanupAttribute}()");
-
-						break;
-					default:
-						throw new ArgumentOutOfRangeException(nameof(testFramework));
-				}
-
-				this.AppendLineIndented("{");
-				this.indentLevel++;
-
-				this.AppendLineIndented(mockFramework.TestCleanupCode);
-
-				this.indentLevel--;
-				this.AppendLineIndented("}");
-				this.AppendLineIndented();
-			}
-
-			// Test method
+		private void AddTestMethod(TestFramework testFramework, MockFramework mockFramework)
+		{
 			this.AppendLineIndented($"[{testFramework.TestMethodAttribute}]");
 			this.AppendLineIndented("public void TestMethod1()");
 			this.AppendLineIndented("{");
@@ -135,6 +113,26 @@ namespace UnitTestBoilerplate
 			this.AppendLineIndented(); // Separator
 
 			this.AppendLineIndented("// Act");
+			AddActCode(mockFramework);
+
+			this.AppendLineIndented(); // Blank line for users to put in their own act code
+			this.AppendLineIndented(); // Separator
+
+			this.AppendLineIndented("// Assert");
+			this.AppendLineIndented(); // Blank line for users to put in their own assert code
+
+			this.indentLevel--;
+			this.AppendLineIndented("}");
+		}
+
+		private void AddActCode(MockFramework mockFramework)
+		{
+			if (string.IsNullOrEmpty(mockFramework.TestedObjectCreationCode) == false)
+			{
+				this.AppendLineIndented(mockFramework.TestedObjectCreationCode);
+				return;
+			}
+
 			switch (mockFramework.TestedObjectCreationStyle)
 			{
 				case TestedObjectCreationStyle.HelperMethod:
@@ -148,36 +146,105 @@ namespace UnitTestBoilerplate
 				default:
 					throw new ArgumentOutOfRangeException();
 			}
+		}
 
-			this.AppendLineIndented(); // Blank line for users to put in their own act code
-			this.AppendLineIndented(); // Separator
-
-			this.AppendLineIndented("// Assert");
-			this.AppendLineIndented(); // Blank line for users to put in their own assert code
-
+		private void AddEndOfClassAndNamespace()
+		{
 			this.indentLevel--;
 			this.AppendLineIndented("}");
+			this.indentLevel--;
+			this.AppendLineIndented("}");
+		}
 
-			// Helper method to create tested object
-			if (mockFramework.TestedObjectCreationStyle == TestedObjectCreationStyle.HelperMethod)
+		private void AddTestCleanup(TestFramework testFramework, MockFramework mockFramework)
+		{
+			if (mockFramework.HasTestCleanup == false)
 			{
-				this.AppendLineIndented();
-				this.AppendLineIndented("private $ClassName$ Create$ClassNameShort$()");
-				this.AppendLineIndented("{");
-				this.indentLevel++;
-				this.AppendLineIndented("return $ExplicitConstructor$;");
-				this.indentLevel--;
-				this.AppendLineIndented("}");
-
+				return;
 			}
 
-			// Test class/namespace end
-			this.indentLevel--;
-			this.AppendLineIndented("}");
-			this.indentLevel--;
-			this.AppendLineIndented("}");
+			switch (testFramework.TestCleanupStyle)
+			{
+				case TestCleanupStyle.Disposable:
+					this.AppendLineIndented("public void Dispose()");
 
-			return this.template.ToString();
+					break;
+				case TestCleanupStyle.AttributedMethod:
+					this.AppendLineIndented($"[{testFramework.TestCleanupAttribute}]");
+					this.AppendLineIndented($"public void {testFramework.TestCleanupAttribute}()");
+
+					break;
+				default:
+					throw new ArgumentOutOfRangeException(nameof(testFramework));
+			}
+
+			this.AppendLineIndented("{");
+			this.indentLevel++;
+
+			this.AppendLineIndented(mockFramework.TestCleanupCode);
+
+			this.indentLevel--;
+			this.AppendLineIndented("}");
+			this.AppendLineIndented();
+
+		}
+
+		private void AddTestClassMockFields(MockFramework mockFramework)
+		{
+			if (mockFramework.HasMockFields == false)
+			{
+				return;
+			}
+
+			this.AppendLineIndented("$MockFieldDeclarations$");
+			this.AppendLineIndented();
+		}
+
+		private void AddTestClassStartCode(MockFramework mockFramework)
+		{
+			if (string.IsNullOrEmpty(mockFramework.ClassStartCode))
+			{
+				return;
+			}
+
+			this.AppendLineIndented(mockFramework.ClassStartCode);
+			this.AppendLineIndented();
+
+		}
+
+		private void CreateTestClass(TestFramework testFramework, MockFramework mockFramework)
+		{
+			this.AppendIndent();
+			this.template.Append("public class $ClassName$Tests");
+			if (mockFramework.HasTestCleanup && testFramework.TestCleanupStyle == TestCleanupStyle.Disposable)
+			{
+				this.template.Append(" : IDisposable");
+			}
+
+			this.template.AppendLine();
+			this.AppendLineIndented("{");
+			this.indentLevel++;
+		}
+
+		private void AddTestClassAttribute(TestFramework testFramework)
+		{
+			if (!string.IsNullOrEmpty(testFramework.TestClassAttribute))
+			{
+				this.AppendLineIndented($"[{testFramework.TestClassAttribute}]");
+			}
+		}
+
+		private void AddNamespace()
+		{
+			this.AppendLineIndented("namespace $Namespace$");
+			this.AppendLineIndented("{");
+			this.indentLevel++;
+		}
+
+		private void AddUsingStatements()
+		{
+			this.AppendLineIndented("$UsingStatements$");
+			this.AppendLineIndented();
 		}
 
 		public void AppendIndent()
